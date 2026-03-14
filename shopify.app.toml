@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "94aba6dfcf97f015117a27f3020c64aa"
+client_id = "517ade65aeb980de828961c7b55649de"
 name = "bundle-craft"
 application_url = "https://bundle-craft-server-production.up.railway.app"
 embedded = true
@@ -25,7 +25,7 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_products,write_cart_transforms,read_cart_transforms,read_publications,write_publications"
+scopes = "write_products,read_products,write_cart_transforms,read_cart_transforms,read_publications,write_publications,read_orders"
 
 [auth]
 redirect_urls = [

@@ -8,6 +8,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   switch (topic) {
     case "SHOP_REDACT":
+      await db.message.deleteMany({ where: { conversation: { shop } } });
+      await db.conversation.deleteMany({ where: { shop } });
+      await db.chatSettings.deleteMany({ where: { shop } });
       await db.bundleComponent.deleteMany({
         where: { bundle: { shop } },
       });
@@ -16,8 +19,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.session.deleteMany({ where: { shop } });
       break;
     case "CUSTOMERS_DATA_REQUEST":
+      // Chat conversations may contain customer emails
+      break;
     case "CUSTOMERS_REDACT":
-      // This app does not store customer data
+      // Anonymize customer data in conversations
+      await db.conversation.updateMany({
+        where: { shop, customerEmail: { not: null } },
+        data: { customerEmail: null, customerName: null },
+      });
       break;
   }
 

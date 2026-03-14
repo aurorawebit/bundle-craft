@@ -1,0 +1,54 @@
+{% comment %}
+  BundleCraft Chat Widget — floating chat bubble on all storefront pages.
+  Connects to the app server for AI-powered customer support.
+{% endcomment %}
+
+<div id="bc-chat-root"
+     data-app-url="https://bundle-craft-server-production.up.railway.app"
+     data-shop="{{ shop.permanent_domain }}"
+     data-welcome="{{ block.settings.welcome_message | escape }}"
+     style="
+       --bc-primary: {{ block.settings.primary_color }};
+       --bc-primary-text: {{ block.settings.primary_text_color }};
+       --bc-radius: {{ block.settings.border_radius }}px;
+     ">
+</div>
+
+{{ 'chat-widget.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'chat-widget.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "BundleCraft Chat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary color",
+      "default": "#2563eb"
+    },
+    {
+      "type": "color",
+      "id": "primary_text_color",
+      "label": "Primary text color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "text",
+      "id": "welcome_message",
+      "label": "Welcome message",
+      "default": "Hi! How can I help you today?"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border radius",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "default": 12
+    }
+  ]
+}
+{% endschema %}

@@ -29,6 +29,8 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Bundles</s-link>
+        <s-link href="/app/conversations">Conversations</s-link>
+        <s-link href="/app/chat-settings">Chat Settings</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
       <Outlet />
