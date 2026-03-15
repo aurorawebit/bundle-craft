@@ -11,6 +11,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.message.deleteMany({ where: { conversation: { shop } } });
       await db.conversation.deleteMany({ where: { shop } });
       await db.chatSettings.deleteMany({ where: { shop } });
+      await db.storeProduct.deleteMany({ where: { shop } });
+      await db.storePage.deleteMany({ where: { shop } });
       await db.bundleComponent.deleteMany({
         where: { bundle: { shop } },
       });

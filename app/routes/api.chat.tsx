@@ -10,6 +10,7 @@ import {
   lookupOrderByNumber,
   lookupOrdersByEmail,
 } from "../services/orders.server";
+import { getStoreKnowledge } from "../services/store-sync.server";
 
 // Simple in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -156,6 +157,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    // Load store knowledge (products + pages)
+    const storeData = await getStoreKnowledge(shop);
+    const storeKnowledge = {
+      products: storeData.products.map((p) => ({
+        title: p.title,
+        handle: p.handle,
+        description: p.description,
+        productType: p.productType,
+        vendor: p.vendor,
+        tags: p.tags,
+        priceRange: p.priceRange,
+      })),
+      pages: storeData.pages.map((p) => ({
+        title: p.title,
+        handle: p.handle,
+        body: p.body,
+      })),
+      shopDomain: shop,
+    };
+
     // Build message history for AI
     const allMessages = [
       ...conversation.messages.map((m) => ({
@@ -174,6 +195,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         apiKey: settings.aiApiKey || "",
         model: settings.aiModel,
       },
+      storeKnowledge,
     );
 
     const aiMessage = await addMessage(

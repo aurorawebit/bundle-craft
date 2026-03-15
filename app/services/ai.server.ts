@@ -21,6 +21,28 @@ interface AiConfig {
   model?: string | null;
 }
 
+interface ProductInfo {
+  title: string;
+  handle: string;
+  description: string;
+  productType: string;
+  vendor: string;
+  tags: string;
+  priceRange: string;
+}
+
+interface PageInfo {
+  title: string;
+  handle: string;
+  body: string;
+}
+
+interface StoreKnowledge {
+  products: ProductInfo[];
+  pages: PageInfo[];
+  shopDomain: string;
+}
+
 const DEFAULT_MODELS: Record<string, string> = {
   claude: "claude-sonnet-4-20250514",
   openai: "gpt-4o",
@@ -30,18 +52,57 @@ const DEFAULT_MODELS: Record<string, string> = {
 function buildSystemPrompt(
   orderContext: OrderInfo[] | null,
   customSystemPrompt?: string | null,
+  storeKnowledge?: StoreKnowledge | null,
 ): string {
   const parts = [
     "You are a friendly and helpful customer support assistant for an online store.",
     "Keep your responses concise and helpful. Be warm but professional.",
     "If the customer asks about an order, use the order data provided to give accurate answers.",
     "Never fabricate order information. If you don't have order data, ask the customer for their order number or email.",
-    "You can answer general questions about products, shipping, returns, etc.",
+    "When recommending products, ask clarifying questions first to understand the customer's needs, then suggest the most relevant products.",
+    "When suggesting a product, ALWAYS include a clickable link in this format: https://SHOP_DOMAIN/products/HANDLE",
+    "You can answer questions about the store's location, contact info, policies, etc. using the store pages data.",
     "Respond in the same language the customer uses.",
   ];
 
   if (customSystemPrompt) {
     parts.push(`Store-specific instructions: ${customSystemPrompt}`);
+  }
+
+  if (storeKnowledge) {
+    const domain = storeKnowledge.shopDomain.replace(".myshopify.com", "");
+
+    if (storeKnowledge.products.length > 0) {
+      const productList = storeKnowledge.products.map((p) => {
+        const details = [p.title];
+        if (p.priceRange) details.push(`Price: ${p.priceRange}`);
+        if (p.productType) details.push(`Type: ${p.productType}`);
+        if (p.vendor) details.push(`Brand: ${p.vendor}`);
+        if (p.tags) details.push(`Tags: ${p.tags}`);
+        if (p.description) {
+          // Truncate long descriptions
+          const desc =
+            p.description.length > 200
+              ? p.description.slice(0, 200) + "..."
+              : p.description;
+          details.push(`Description: ${desc}`);
+        }
+        details.push(
+          `Link: https://${storeKnowledge.shopDomain}/products/${p.handle}`,
+        );
+        return details.join(" | ");
+      });
+      parts.push(`\nStore products catalog:\n${productList.join("\n")}`);
+    }
+
+    if (storeKnowledge.pages.length > 0) {
+      const pageList = storeKnowledge.pages.map((p) => {
+        const body =
+          p.body.length > 500 ? p.body.slice(0, 500) + "..." : p.body;
+        return `[${p.title}] (https://${storeKnowledge.shopDomain}/pages/${p.handle})\n${body}`;
+      });
+      parts.push(`\nStore pages (contains store info, policies, contact details, etc.):\n${pageList.join("\n\n")}`);
+    }
   }
 
   if (orderContext && orderContext.length > 0) {
@@ -103,7 +164,7 @@ async function callClaude(
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model,
-    max_tokens: 500,
+    max_tokens: 1000,
     system: systemPrompt,
     messages,
   });
@@ -119,7 +180,7 @@ async function callOpenAI(
 ): Promise<string> {
   const body = {
     model,
-    max_tokens: 500,
+    max_tokens: 1000,
     messages: [
       { role: "system", content: systemPrompt },
       ...messages,
@@ -182,13 +243,14 @@ export async function generateChatResponse(
   orderContext: OrderInfo[] | null,
   customSystemPrompt?: string | null,
   aiConfig?: AiConfig,
+  storeKnowledge?: StoreKnowledge | null,
 ): Promise<string> {
   const cleaned = prepareMessages(messages);
   if (cleaned.length === 0 || cleaned[0].role !== "user") {
     return "Hi! How can I help you today?";
   }
 
-  const systemPrompt = buildSystemPrompt(orderContext, customSystemPrompt);
+  const systemPrompt = buildSystemPrompt(orderContext, customSystemPrompt, storeKnowledge);
   const provider = aiConfig?.provider || "claude";
   const apiKey = aiConfig?.apiKey || "";
   const model = aiConfig?.model || DEFAULT_MODELS[provider] || DEFAULT_MODELS.claude;

@@ -9,6 +9,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getChatSettings, updateChatSettings } from "../models/chat.server";
+import { syncAll, getSyncStatus } from "../services/store-sync.server";
 
 const MODEL_OPTIONS: Record<string, { label: string; value: string }[]> = {
   claude: [
@@ -39,20 +40,34 @@ const API_KEY_HELP: Record<string, string> = {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const settings = await getChatSettings(session.shop);
-  // Mask the API key for display
+  const [settings, syncStatus] = await Promise.all([
+    getChatSettings(session.shop),
+    getSyncStatus(session.shop),
+  ]);
   const maskedKey = settings.aiApiKey
     ? settings.aiApiKey.slice(0, 8) + "••••••••" + settings.aiApiKey.slice(-4)
     : "";
   return {
     settings: { ...settings, aiApiKey: maskedKey },
     hasApiKey: !!settings.aiApiKey,
+    syncStatus,
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "sync") {
+    const result = await syncAll(session.shop, admin);
+    return {
+      ok: true,
+      synced: true,
+      productCount: result.productCount,
+      pageCount: result.pageCount,
+    };
+  }
 
   const aiApiKey = formData.get("aiApiKey") as string;
   const updateData: Parameters<typeof updateChatSettings>[1] = {
@@ -63,7 +78,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     systemPrompt: (formData.get("systemPrompt") as string) || null,
   };
 
-  // Only update API key if a new one was provided (not the masked value)
   if (aiApiKey && !aiApiKey.includes("••••")) {
     updateData.aiApiKey = aiApiKey;
   }
@@ -74,8 +88,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ChatSettingsPage() {
-  const { settings, hasApiKey } = useLoaderData<typeof loader>();
+  const { settings, hasApiKey, syncStatus } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const syncFetcher = useFetcher();
   const shopify = useAppBridge();
 
   const [welcomeMessage, setWelcomeMessage] = useState(settings.welcomeMessage);
@@ -86,9 +102,9 @@ export default function ChatSettingsPage() {
   const [systemPrompt, setSystemPrompt] = useState(settings.systemPrompt || "");
 
   const isSubmitting = fetcher.state !== "idle";
+  const isSyncing = syncFetcher.state !== "idle";
   const models = MODEL_OPTIONS[aiProvider] || MODEL_OPTIONS.claude;
 
-  // Reset model when provider changes
   useEffect(() => {
     const providerModels = MODEL_OPTIONS[aiProvider];
     if (providerModels && !providerModels.some((m) => m.value === aiModel)) {
@@ -102,9 +118,23 @@ export default function ChatSettingsPage() {
     }
   }, [fetcher.data, fetcher.state, shopify]);
 
+  useEffect(() => {
+    const data = syncFetcher.data as {
+      synced?: boolean;
+      productCount?: number;
+      pageCount?: number;
+    } | undefined;
+    if (data?.synced && syncFetcher.state === "idle") {
+      shopify.toast.show(
+        `Synced ${data.productCount} products and ${data.pageCount} pages`,
+      );
+    }
+  }, [syncFetcher.data, syncFetcher.state, shopify]);
+
   const handleSubmit = useCallback(() => {
     fetcher.submit(
       {
+        intent: "save",
         welcomeMessage,
         aiEnabled: String(aiEnabled),
         aiProvider,
@@ -116,13 +146,30 @@ export default function ChatSettingsPage() {
     );
   }, [fetcher, welcomeMessage, aiEnabled, aiProvider, aiApiKey, aiModel, systemPrompt]);
 
+  const handleSync = useCallback(() => {
+    syncFetcher.submit({ intent: "sync" }, { method: "POST" });
+  }, [syncFetcher]);
+
   const saveBtnRef = useRef<HTMLElement>(null);
+  const syncBtnRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const el = saveBtnRef.current;
     if (!el) return;
     el.addEventListener("click", handleSubmit);
     return () => el.removeEventListener("click", handleSubmit);
   }, [handleSubmit]);
+
+  useEffect(() => {
+    const el = syncBtnRef.current;
+    if (!el) return;
+    el.addEventListener("click", handleSync);
+    return () => el.removeEventListener("click", handleSync);
+  }, [handleSync]);
+
+  const lastSyncedText = syncStatus.lastSynced
+    ? `Last synced: ${new Date(syncStatus.lastSynced).toLocaleString()}`
+    : "Never synced";
 
   return (
     <s-page heading="Chat Settings">
@@ -134,6 +181,31 @@ export default function ChatSettingsPage() {
       >
         Save
       </s-button>
+
+      <s-section heading="Store knowledge">
+        <s-paragraph>
+          Sync your store's products and pages so the AI chatbot can answer
+          questions about your products, recommend items, and provide store
+          information (address, contact, policies, etc.).
+        </s-paragraph>
+        <s-box paddingBlockStart="200">
+          <s-inline gap="400" blockAlign="center">
+            <s-text variant="bodySm" tone="subdued">
+              {syncStatus.productCount} products, {syncStatus.pageCount} pages
+              cached
+            </s-text>
+            <s-text variant="bodySm" tone="subdued">
+              {lastSyncedText}
+            </s-text>
+            <s-button
+              ref={syncBtnRef}
+              {...(isSyncing ? { loading: true } : {})}
+            >
+              Sync now
+            </s-button>
+          </s-inline>
+        </s-box>
+      </s-section>
 
       <s-section heading="Chat behavior">
         <s-text-field
@@ -209,17 +281,13 @@ export default function ChatSettingsPage() {
 
       <s-section slot="aside" heading="About">
         <s-paragraph>
-          Configure how the chat widget behaves on your storefront. When AI is
-          enabled, customers get instant responses powered by your chosen AI
-          provider.
+          The AI chatbot uses your synced store data to answer customer
+          questions, recommend products with links, and provide store
+          information like addresses and contact details.
         </s-paragraph>
         <s-paragraph>
-          You need to provide your own API key for the AI provider. The key is
-          stored securely and only used for generating chat responses.
-        </s-paragraph>
-        <s-paragraph>
-          You can always view and reply to conversations manually from the
-          Conversations page.
+          Click "Sync now" whenever you update products or pages. The chatbot
+          will use the latest synced data.
         </s-paragraph>
       </s-section>
     </s-page>

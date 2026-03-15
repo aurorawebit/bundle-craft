@@ -118,6 +118,38 @@ model Message {
   @@index([conversationId])
 }
 
+model StoreProduct {
+  id          String   @id @default(cuid())
+  shop        String
+  productId   String
+  handle      String
+  title       String
+  description String   @default("")
+  productType String   @default("")
+  vendor      String   @default("")
+  tags        String   @default("")   // comma-separated
+  priceRange  String   @default("")   // e.g. "299.00 - 599.00"
+  status      String   @default("ACTIVE")
+  imageUrl    String?
+  syncedAt    DateTime @default(now())
+
+  @@unique([shop, productId])
+  @@index([shop])
+}
+
+model StorePage {
+  id       String   @id @default(cuid())
+  shop     String
+  pageId   String
+  handle   String
+  title    String
+  body     String   @default("")  // HTML stripped to text
+  syncedAt DateTime @default(now())
+
+  @@unique([shop, pageId])
+  @@index([shop])
+}
+
 model ChatSettings {
   id               String   @id @default(cuid())
   shop             String   @unique
