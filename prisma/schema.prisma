@@ -129,9 +129,11 @@ model StoreProduct {
   vendor      String   @default("")
   tags        String   @default("")   // comma-separated
   priceRange  String   @default("")   // e.g. "299.00 - 599.00"
-  status      String   @default("ACTIVE")
-  imageUrl    String?
-  syncedAt    DateTime @default(now())
+  status            String   @default("ACTIVE")
+  imageUrl          String?
+  inventoryQuantity Int?
+  tracksInventory   Boolean  @default(true)
+  syncedAt          DateTime @default(now())
 
   @@unique([shop, productId])
   @@index([shop])

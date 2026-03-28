@@ -19,6 +19,9 @@
   var isOpen = false;
   var sending = false;
 
+  // Product card data cache keyed by handle
+  var productCardMap = {};
+
   // Build DOM
   root.innerHTML =
     '<div class="bc-panel" id="bc-panel">' +
@@ -62,10 +65,150 @@
     }
   }
 
-  function addMessageToUI(content, senderType) {
+  function buildProductCardEl(product, url) {
+    var card = document.createElement("a");
+    card.href = url;
+    card.className = "bc-product-card";
+    card.target = "_blank";
+    card.rel = "noopener";
+
+    if (product.imageUrl) {
+      var img = document.createElement("img");
+      img.className = "bc-product-card__img";
+      img.src = product.imageUrl;
+      img.alt = product.title;
+      card.appendChild(img);
+    }
+
+    var info = document.createElement("div");
+    info.className = "bc-product-card__info";
+
+    var title = document.createElement("p");
+    title.className = "bc-product-card__title";
+    title.textContent = product.title;
+    info.appendChild(title);
+
+    if (product.priceRange) {
+      var price = document.createElement("p");
+      price.className = "bc-product-card__price";
+      price.textContent = product.priceRange;
+      info.appendChild(price);
+    }
+
+    card.appendChild(info);
+    return card;
+  }
+
+  /**
+   * Parse AI message content and build DOM nodes.
+   * - Product links (/products/handle) become product cards if data is available
+   * - Other markdown links become styled links
+   * - **bold** is rendered
+   * - Newlines become line breaks
+   */
+  function renderAiMessage(text, container) {
+    var productCards = [];
+    var cardHandles = {};
+
+    // Step 1: Replace markdown links [text](url) with placeholders
+    var placeholders = [];
+    var processed = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (full, linkText, url) {
+      var productMatch = url.match(/\/products\/([\w-]+)/);
+      if (productMatch) {
+        var handle = productMatch[1];
+        var product = productCardMap[handle];
+        if (product && !cardHandles[handle]) {
+          cardHandles[handle] = true;
+          productCards.push({ product: product, url: url });
+          return ""; // Remove inline, card appended later
+        }
+      }
+      var idx = placeholders.length;
+      placeholders.push({ type: "link", text: linkText, url: url });
+      return "\x00LINK" + idx + "\x00";
+    });
+
+    // Step 2: Replace bare product URLs
+    processed = processed.replace(/(https?:\/\/[^\s,.)]+\/products\/([\w-]+))/g, function (url, _full, handle) {
+      var product = productCardMap[handle];
+      if (product && !cardHandles[handle]) {
+        cardHandles[handle] = true;
+        productCards.push({ product: product, url: url });
+        return "";
+      }
+      var idx = placeholders.length;
+      placeholders.push({ type: "link", text: url, url: url });
+      return "\x00LINK" + idx + "\x00";
+    });
+
+    // Step 3: Replace bare non-product URLs
+    processed = processed.replace(/(https?:\/\/[^\s,.)]+)/g, function (url) {
+      var idx = placeholders.length;
+      placeholders.push({ type: "link", text: url, url: url });
+      return "\x00LINK" + idx + "\x00";
+    });
+
+    // Step 4: Clean up empty markdown artifacts
+    processed = processed.replace(/\(\s*\)/g, "");
+    processed = processed.replace(/\[\s*\]/g, "");
+
+    // Step 5: Split by bold markers and placeholders, build DOM
+    // Split into segments by **bold**, \x00LINKn\x00, and newlines
+    var parts = processed.split(/(\*\*[^*]+\*\*|\x00LINK\d+\x00|\n)/g);
+
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (!part) continue;
+
+      if (part === "\n") {
+        container.appendChild(document.createElement("br"));
+      } else if (part.match(/^\*\*(.+)\*\*$/)) {
+        var strong = document.createElement("strong");
+        strong.textContent = part.slice(2, -2);
+        container.appendChild(strong);
+      } else if (part.match(/^\x00LINK(\d+)\x00$/)) {
+        var linkIdx = parseInt(part.match(/\d+/)[0], 10);
+        var linkData = placeholders[linkIdx];
+        var a = document.createElement("a");
+        a.href = linkData.url;
+        a.className = "bc-link";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = linkData.text;
+        container.appendChild(a);
+      } else {
+        container.appendChild(document.createTextNode(part));
+      }
+    }
+
+    // Append product cards
+    if (productCards.length > 0) {
+      var cardsContainer = document.createElement("div");
+      cardsContainer.className = "bc-product-cards";
+      productCards.forEach(function (item) {
+        cardsContainer.appendChild(buildProductCardEl(item.product, item.url));
+      });
+      container.appendChild(cardsContainer);
+    }
+  }
+
+  function addMessageToUI(content, senderType, products) {
+    // Cache any product card data
+    if (products) {
+      products.forEach(function (p) {
+        productCardMap[p.handle] = p;
+      });
+    }
+
     var div = document.createElement("div");
     div.className = "bc-msg bc-msg-" + senderType;
-    div.textContent = content;
+
+    if (senderType === "ai") {
+      renderAiMessage(content, div);
+    } else {
+      div.textContent = content;
+    }
+
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
@@ -115,11 +258,8 @@
       })
       .then(function (data) {
         hideTyping();
-        if (data.conversationId) {
-          /* conversationId tracked for future use */
-        }
         if (data.message) {
-          addMessageToUI(data.message.content, data.message.senderType);
+          addMessageToUI(data.message.content, data.message.senderType, data.productCards);
         }
         if (data.error) {
           addMessageToUI(
@@ -157,9 +297,6 @@
         return res.json();
       })
       .then(function (data) {
-        if (data.conversationId) {
-          /* conversationId tracked for future use */
-        }
         if (data.messages && data.messages.length > 0) {
           // Clear welcome and show actual history
           messagesEl.innerHTML = "";

@@ -243,14 +243,17 @@ export async function createBundle(
     );
   }
 
-  // Step 5: Publish product to online store
+  // Step 5: Set bundle inventory based on component stock
+  await setBundleInventory(admin, productId, variantId, data.components);
+
+  // Step 6: Publish product to online store
   await publishProduct(admin, productId);
 
-  // Step 6: Set bundle offer metafields on component products
+  // Step 7: Set bundle offer metafields on component products
   const componentProductIds = data.components.map((c) => c.productId);
   await syncBundleOffersOnProducts(admin, componentProductIds);
 
-  // Step 7: Update local DB with Shopify IDs
+  // Step 8: Update local DB with Shopify IDs
   await db.bundle.update({
     where: { id: bundle.id },
     data: { productId, variantId },
@@ -410,6 +413,8 @@ export async function updateBundle(
         },
       },
     );
+    // Update bundle inventory based on component stock
+    await setBundleInventory(admin, bundle.productId, bundle.variantId, data.components);
   }
 
   // Sync bundle offer metafields on both old and new component products
@@ -662,6 +667,11 @@ export async function activateBundle(
         );
       }
 
+      // Set bundle inventory based on component stock
+      if (variantId) {
+        await setBundleInventory(admin, productId, variantId, bundle.components);
+      }
+
       await publishProduct(admin, productId);
 
       await db.bundle.update({
@@ -769,6 +779,87 @@ async function syncBundleOffersOnProducts(
       },
     );
   }
+}
+
+/**
+ * Set bundle inventory to the minimum inventory across all component variants.
+ */
+/**
+ * Register component variants with Shopify's native bundle system
+ * so Shopify automatically tracks bundle inventory as the min of components.
+ */
+export async function setBundleInventory(
+  admin: { graphql: (...args: any[]) => any },
+  bundleProductId: string,
+  bundleVariantId: string,
+  components: { variantId: string; quantity: number }[],
+) {
+  if (components.length === 0) return;
+
+  // Fetch existing component relationships to remove them first
+  const existingRes = await admin.graphql(
+    `#graphql
+    query getBundleComponents($id: ID!) {
+      productVariant(id: $id) {
+        productVariantComponents(first: 50) {
+          nodes {
+            id
+            productVariant { id }
+          }
+        }
+      }
+    }`,
+    { variables: { id: bundleVariantId } },
+  );
+  const existingJson = await existingRes.json();
+  const existingComponents =
+    existingJson.data?.productVariant?.productVariantComponents?.nodes || [];
+  const toRemove = existingComponents.map((c: { id: string }) => c.id);
+
+  const relRes = await admin.graphql(
+    `#graphql
+    mutation productVariantRelationshipBulkUpdate($input: [ProductVariantRelationshipUpdateInput!]!) {
+      productVariantRelationshipBulkUpdate(input: $input) {
+        parentProductVariants {
+          id
+          productVariantComponents(first: 10) {
+            nodes {
+              id
+              productVariant { id }
+              quantity
+            }
+          }
+        }
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        input: [
+          {
+            parentProductVariantId: bundleVariantId,
+            productVariantRelationshipsToRemove: toRemove,
+            productVariantRelationshipsToCreate: components.map((c) => ({
+              productVariantId: c.variantId,
+              quantity: c.quantity,
+            })),
+          },
+        ],
+      },
+    },
+  );
+  const relJson = await relRes.json();
+  console.log(
+    "setBundleInventory result:",
+    JSON.stringify({
+      bundleProductId,
+      bundleVariantId,
+      componentsInput: components.map((c) => ({ variantId: c.variantId, quantity: c.quantity })),
+      toRemove,
+      parentVariants: relJson.data?.productVariantRelationshipBulkUpdate?.parentProductVariants,
+      userErrors: relJson.data?.productVariantRelationshipBulkUpdate?.userErrors,
+    }, null, 2),
+  );
 }
 
 async function publishProduct(

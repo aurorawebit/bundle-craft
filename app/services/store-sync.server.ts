@@ -39,15 +39,14 @@ export async function syncProducts(
             vendor
             tags
             status
-            priceRangeV2 {
+            priceRange {
               minVariantPrice { amount }
               maxVariantPrice { amount }
             }
-            featuredMedia {
-              ... on MediaImage {
-                image { url }
-              }
-            }
+            featuredImage { url }
+            images(first: 1) { nodes { url } }
+            totalInventory
+            tracksInventory
           }
         }
       }`,
@@ -59,9 +58,9 @@ export async function syncProducts(
     if (!products) break;
 
     for (const p of products.nodes) {
-      const minPrice = p.priceRangeV2?.minVariantPrice?.amount || "0";
-      const maxPrice = p.priceRangeV2?.maxVariantPrice?.amount || "0";
-      const priceRange =
+      const minPrice = p.priceRange?.minVariantPrice?.amount || "0";
+      const maxPrice = p.priceRange?.maxVariantPrice?.amount || "0";
+      const priceRangeStr =
         minPrice === maxPrice ? `$${minPrice}` : `$${minPrice} - $${maxPrice}`;
 
       await db.storeProduct.upsert({
@@ -75,9 +74,11 @@ export async function syncProducts(
           productType: p.productType || "",
           vendor: p.vendor || "",
           tags: (p.tags || []).join(", "),
-          priceRange,
+          priceRange: priceRangeStr,
           status: p.status,
-          imageUrl: p.featuredMedia?.image?.url || null,
+          imageUrl: p.featuredImage?.url || p.images?.nodes?.[0]?.url || null,
+          inventoryQuantity: p.totalInventory ?? null,
+          tracksInventory: p.tracksInventory ?? true,
         },
         update: {
           handle: p.handle,
@@ -86,9 +87,11 @@ export async function syncProducts(
           productType: p.productType || "",
           vendor: p.vendor || "",
           tags: (p.tags || []).join(", "),
-          priceRange,
+          priceRange: priceRangeStr,
           status: p.status,
-          imageUrl: p.featuredMedia?.image?.url || null,
+          imageUrl: p.featuredImage?.url || p.images?.nodes?.[0]?.url || null,
+          inventoryQuantity: p.totalInventory ?? null,
+          tracksInventory: p.tracksInventory ?? true,
           syncedAt: new Date(),
         },
       });

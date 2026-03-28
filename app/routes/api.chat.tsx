@@ -205,6 +205,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       orderContext ? JSON.stringify(orderContext) : undefined,
     );
 
+    // Extract product handles mentioned in the response and attach card data
+    const handleRegex = /\/products\/([\w-]+)/g;
+    const mentionedHandles = new Set<string>();
+    let match;
+    while ((match = handleRegex.exec(aiResponse)) !== null) {
+      mentionedHandles.add(match[1]);
+    }
+    const productCards = storeData.products
+      .filter((p) => mentionedHandles.has(p.handle))
+      .map((p) => ({
+        handle: p.handle,
+        title: p.title,
+        priceRange: p.priceRange,
+        imageUrl: p.imageUrl,
+      }));
+    console.log("productCards debug:", JSON.stringify({ mentionedHandles: [...mentionedHandles], productCards }));
+
     return Response.json(
       {
         conversationId: conversation.id,
@@ -214,6 +231,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           senderType: aiMessage.senderType,
           createdAt: aiMessage.createdAt,
         },
+        productCards,
       },
       { headers },
     );

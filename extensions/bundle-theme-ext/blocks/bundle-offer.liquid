@@ -41,9 +41,11 @@
             {% endif %}
           </p>
           {% if offer.discountLabel != blank and block.settings.show_discount %}
+            {% if offer.discountValue != 0 or block.settings.show_zero_discount %}
             <p class="bundle-offer__discount">
               {{ block.settings.discount_prefix }} <strong>{{ offer.discountLabel }}</strong> {{ block.settings.discount_suffix }}
             </p>
+            {% endif %}
           {% endif %}
           {% if offer.handle != blank and block.settings.show_button %}
             <a href="/products/{{ offer.handle }}" class="bundle-offer__button">
@@ -206,6 +208,12 @@
       "id": "show_discount",
       "label": "Show discount info",
       "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_zero_discount",
+      "label": "Show discount when 0%",
+      "default": false
     },
     {
       "type": "checkbox",
