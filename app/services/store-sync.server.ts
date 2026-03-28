@@ -40,8 +40,8 @@ export async function syncProducts(
             tags
             status
             priceRange {
-              minVariantPrice { amount }
-              maxVariantPrice { amount }
+              minVariantPrice { amount currencyCode }
+              maxVariantPrice { amount currencyCode }
             }
             featuredImage { url }
             images(first: 1) { nodes { url } }
@@ -58,10 +58,18 @@ export async function syncProducts(
     if (!products) break;
 
     for (const p of products.nodes) {
-      const minPrice = p.priceRange?.minVariantPrice?.amount || "0";
-      const maxPrice = p.priceRange?.maxVariantPrice?.amount || "0";
+      const minRaw = parseFloat(p.priceRange?.minVariantPrice?.amount || "0");
+      const maxRaw = parseFloat(p.priceRange?.maxVariantPrice?.amount || "0");
+      const currency = p.priceRange?.minVariantPrice?.currencyCode || "USD";
+      const fmt = (n: number) => {
+        try {
+          return new Intl.NumberFormat("en", { style: "currency", currency }).format(n);
+        } catch {
+          return `$${n.toFixed(2)}`;
+        }
+      };
       const priceRangeStr =
-        minPrice === maxPrice ? `$${minPrice}` : `$${minPrice} - $${maxPrice}`;
+        minRaw === maxRaw ? fmt(minRaw) : `${fmt(minRaw)} - ${fmt(maxRaw)}`;
 
       await db.storeProduct.upsert({
         where: { shop_productId: { shop, productId: p.id } },
