@@ -193,8 +193,7 @@ export default function ChatSettingsPage() {
             <s-text variant="bodySm" tone="subdued">
               {syncStatus.productCount} products, {syncStatus.pageCount} pages
               cached
-            </s-text>
-            <s-text variant="bodySm" tone="subdued">
+              <br />
               {lastSyncedText}
             </s-text>
             <s-button
