@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { LoaderFunctionArgs, HeadersFunction } from "react-router";
 import { useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getConversations, getConversationStats } from "../models/chat.server";
@@ -25,6 +26,7 @@ export default function Conversations() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [filter, setFilter] = useState(status);
+  const filterRef = useRef<HTMLElement>(null);
 
   // Poll for new conversations every 15 seconds
   useEffect(() => {
@@ -36,14 +38,17 @@ export default function Conversations() {
     return () => clearInterval(interval);
   }, [revalidator]);
 
-  const handleFilterChange = useCallback(
-    (e: Event) => {
+  useEffect(() => {
+    const el = filterRef.current;
+    if (!el) return;
+    const handler = (e: Event) => {
       const value = (e.currentTarget as HTMLSelectElement).value;
       setFilter(value);
       navigate(`/app/conversations?status=${value}`);
-    },
-    [navigate],
-  );
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, [navigate]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -60,6 +65,12 @@ export default function Conversations() {
     return `${diffDays}d ago`;
   };
 
+  const badgeTone = (s: string) => {
+    if (s === "escalated") return "warning";
+    if (s === "closed") return "read";
+    return "info";
+  };
+
   return (
     <s-page heading="Conversations">
       <s-box paddingBlockEnd="400">
@@ -72,6 +83,7 @@ export default function Conversations() {
             borderColor="border"
           >
             <s-text variant="headingMd">{stats.total}</s-text>
+            <br />
             <s-text variant="bodySm" tone="subdued">
               Total
             </s-text>
@@ -84,6 +96,7 @@ export default function Conversations() {
             borderColor="border"
           >
             <s-text variant="headingMd">{stats.active}</s-text>
+            <br />
             <s-text variant="bodySm" tone="subdued">
               Active
             </s-text>
@@ -96,6 +109,7 @@ export default function Conversations() {
             borderColor="border"
           >
             <s-text variant="headingMd">{stats.escalated}</s-text>
+            <br />
             <s-text variant="bodySm" tone="subdued">
               Escalated
             </s-text>
@@ -106,9 +120,9 @@ export default function Conversations() {
       <s-section>
         <s-box paddingBlockEnd="400">
           <s-select
+            ref={filterRef}
             label="Filter"
             value={filter}
-            onChange={handleFilterChange}
           >
             <s-option value="all">All conversations</s-option>
             <s-option value="active">Active</s-option>
@@ -128,49 +142,66 @@ export default function Conversations() {
           <s-box>
             {conversations.map((conv) => {
               const lastMessage = conv.messages[0];
+              const preview = lastMessage
+                ? lastMessage.content.replace(/\*\*/g, "").slice(0, 100) +
+                  (lastMessage.content.length > 100 ? "…" : "")
+                : "No messages yet";
+              const lastSender =
+                lastMessage?.senderType === "customer"
+                  ? "Customer"
+                  : lastMessage?.senderType === "ai"
+                    ? "AI"
+                    : "You";
+
               return (
-                <s-box
+                <Link
                   key={conv.id}
-                  padding="400"
-                  background="bg-surface"
-                  borderRadius="200"
-                  borderWidth="025"
-                  borderColor="border"
-                  cursor="pointer"
-                  onClick={() => navigate(`/app/conversations/${conv.id}`)}
-                  style={{ marginBottom: "8px" }}
+                  to={`/app/conversations/${conv.id}`}
+                  style={{ textDecoration: "none", color: "inherit", display: "block" }}
                 >
-                  <s-inline align="space-between" blockAlign="start">
-                    <s-box>
-                      <s-inline gap="200" blockAlign="center">
-                        <s-text variant="headingSm">
-                          {conv.customerEmail || conv.customerName || "Anonymous"}
-                        </s-text>
-                        <s-badge
-                          tone={
-                            conv.status === "escalated"
-                              ? "warning"
-                              : conv.status === "closed"
-                                ? undefined
-                                : "info"
-                          }
-                        >
-                          {conv.status}
-                        </s-badge>
-                      </s-inline>
-                      {lastMessage && (
-                        <s-text variant="bodySm" tone="subdued">
-                          {lastMessage.content.length > 80
-                            ? lastMessage.content.slice(0, 80) + "…"
-                            : lastMessage.content}
-                        </s-text>
-                      )}
-                    </s-box>
-                    <s-text variant="bodySm" tone="subdued">
-                      {formatTime(conv.updatedAt)}
-                    </s-text>
-                  </s-inline>
-                </s-box>
+                  <s-box
+                    padding="400"
+                    background="bg-surface"
+                    borderRadius="200"
+                    borderWidth="025"
+                    borderColor="border"
+                    style={{
+                      marginBottom: "8px",
+                      cursor: "pointer",
+                      transition: "box-shadow 0.15s",
+                    }}
+                    onMouseEnter={(e: React.MouseEvent) =>
+                      ((e.currentTarget as HTMLElement).style.boxShadow =
+                        "0 1px 6px rgba(0,0,0,0.1)")
+                    }
+                    onMouseLeave={(e: React.MouseEvent) =>
+                      ((e.currentTarget as HTMLElement).style.boxShadow = "none")
+                    }
+                  >
+                    <s-inline align="space-between" blockAlign="start">
+                      <s-box style={{ flex: 1, minWidth: 0 }}>
+                        <s-inline gap="200" blockAlign="center">
+                          <s-text variant="headingSm">
+                            {conv.customerEmail ||
+                              conv.customerName ||
+                              "Anonymous"}
+                          </s-text>
+                          <s-badge tone={badgeTone(conv.status)}>
+                            {conv.status}
+                          </s-badge>
+                        </s-inline>
+                        <s-box paddingBlockStart="100">
+                          <s-text variant="bodySm" tone="subdued">
+                            {lastSender}: {preview}
+                          </s-text>
+                        </s-box>
+                      </s-box>
+                      <s-text variant="bodySm" tone="subdued">
+                        {formatTime(conv.updatedAt)}
+                      </s-text>
+                    </s-inline>
+                  </s-box>
+                </Link>
               );
             })}
 
