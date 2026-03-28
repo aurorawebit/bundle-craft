@@ -58,16 +58,8 @@ export async function syncProducts(
     if (!products) break;
 
     for (const p of products.nodes) {
-      if (products.nodes.indexOf(p) === 0) {
-        console.log("First product price debug:", JSON.stringify({
-          title: p.title,
-          minAmount: p.priceRange?.minVariantPrice?.amount,
-          maxAmount: p.priceRange?.maxVariantPrice?.amount,
-          currency: p.priceRange?.minVariantPrice?.currencyCode,
-        }));
-      }
-      const minRaw = parseFloat(p.priceRange?.minVariantPrice?.amount || "0");
-      const maxRaw = parseFloat(p.priceRange?.maxVariantPrice?.amount || "0");
+      const minRaw = parseFloat(p.priceRange?.minVariantPrice?.amount || "0") / 100;
+      const maxRaw = parseFloat(p.priceRange?.maxVariantPrice?.amount || "0") / 100;
       const currency = p.priceRange?.minVariantPrice?.currencyCode || "USD";
       const fmt = (n: number) => {
         try {
