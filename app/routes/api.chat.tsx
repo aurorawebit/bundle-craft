@@ -120,40 +120,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Look up order data if message contains order number or email
+    // Order lookup — only for authenticated customers (email from Shopify login)
+    // customerEmail is set from the Liquid `customer` object, which is only
+    // available when the customer is logged in via Shopify's authentication.
+    // We never look up orders based on emails typed in chat messages to
+    // prevent exposing other customers' order information.
     let orderContext = null;
-    const orderNumberMatch = message.match(/#?\d{4,}/);
-    if (orderNumberMatch) {
-      const order = await lookupOrderByNumber(
-        shop,
-        orderNumberMatch[0],
-      );
-      if (order) orderContext = [order];
-    }
+    const verifiedEmail = customerEmail || conversation.customerEmail;
 
-    // If customer provided email, look up their orders
-    const emailToLookup =
-      customerEmail || conversation.customerEmail;
-    if (!orderContext && emailToLookup) {
-      const orders = await lookupOrdersByEmail(shop, emailToLookup);
-      if (orders.length > 0) orderContext = orders;
-    }
-
-    // Also check if message contains an email
-    if (!orderContext) {
-      const emailMatch = message.match(
-        /[\w.-]+@[\w.-]+\.\w+/,
-      );
-      if (emailMatch) {
-        // Update conversation with email
-        if (!conversation.customerEmail) {
-          await db.conversation.update({
-            where: { id: conversation.id },
-            data: { customerEmail: emailMatch[0] },
-          });
+    if (verifiedEmail) {
+      // Only look up by order number if we have a verified email to cross-check
+      const orderNumberMatch = message.match(/#?\d{4,}/);
+      if (orderNumberMatch) {
+        const order = await lookupOrderByNumber(shop, orderNumberMatch[0]);
+        // Only return the order if it belongs to this customer
+        if (order && order.email?.toLowerCase() === verifiedEmail.toLowerCase()) {
+          orderContext = [order];
         }
-        const orders = await lookupOrdersByEmail(shop, emailMatch[0]);
+      }
+
+      // Look up all orders for the verified customer
+      if (!orderContext) {
+        const orders = await lookupOrdersByEmail(shop, verifiedEmail);
         if (orders.length > 0) orderContext = orders;
+      }
+
+      // Save verified email to conversation if not already set
+      if (customerEmail && !conversation.customerEmail) {
+        await db.conversation.update({
+          where: { id: conversation.id },
+          data: { customerEmail },
+        });
       }
     }
 
