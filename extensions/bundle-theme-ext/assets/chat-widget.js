@@ -153,9 +153,10 @@
       return "\x00LINK" + idx + "\x00";
     });
 
-    // Step 4: Clean up empty markdown artifacts
+    // Step 4: Clean up empty markdown artifacts and bold-wrapped links
     processed = processed.replace(/\(\s*\)/g, "");
     processed = processed.replace(/\[\s*\]/g, "");
+    processed = processed.replace(/\*\*\x00(LINK\d+)\x00\*\*/g, "\x00$1\x00");
 
     // Step 5: Split by bold markers and placeholders, build DOM
     // Split into segments by **bold**, \x00LINKn\x00, and newlines
