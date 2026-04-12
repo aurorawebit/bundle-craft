@@ -178,7 +178,7 @@ export async function createBundle(
     const variantRefs = data.components.map((c) => c.variantId);
     const variantQtys = data.components.map((c) => c.quantity);
 
-    // Step 3: Update variant with requiresComponents and price
+    // Step 3: Update variant price
     await admin.graphql(
       `#graphql
       mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -199,7 +199,6 @@ export async function createBundle(
             {
               id: variantId,
               price: bundlePrice.toFixed(2),
-              requiresComponents: true,
             },
           ],
         },
@@ -629,7 +628,6 @@ export async function activateBundle(
                 {
                   id: variantId,
                   price: bundlePrice.toFixed(2),
-                  requiresComponents: true,
                 },
               ],
             },
