@@ -199,6 +199,7 @@ export async function createBundle(
             {
               id: variantId,
               price: bundlePrice.toFixed(2),
+              requiresComponents: false,
             },
           ],
         },
@@ -372,6 +373,7 @@ export async function updateBundle(
             {
               id: bundle.variantId,
               price: bundlePrice.toFixed(2),
+              requiresComponents: false,
             },
           ],
         },
@@ -628,6 +630,7 @@ export async function activateBundle(
                 {
                   id: variantId,
                   price: bundlePrice.toFixed(2),
+                  requiresComponents: false,
                 },
               ],
             },
