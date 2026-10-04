@@ -246,7 +246,7 @@ export default function ChatSettingsPage() {
           </s-select>
 
           {aiProvider === "openai" ? (
-            <s-text variant="bodySm" tone="subdued">
+            <s-text color="subdued">
               {hasOpenAiEnvKey
                 ? "Using the OpenAI API key configured on the server."
                 : "OpenAI API key is not configured. Set OPENAI_API_KEY in the server environment."}
