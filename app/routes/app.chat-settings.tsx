@@ -34,7 +34,6 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 const API_KEY_HELP: Record<string, string> = {
   claude: "Get your API key from console.anthropic.com",
-  openai: "Get your API key from platform.openai.com/api-keys",
   gemini: "Get your API key from aistudio.google.com/apikey",
 };
 
@@ -50,6 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     settings: { ...settings, aiApiKey: maskedKey },
     hasApiKey: !!settings.aiApiKey,
+    hasOpenAiEnvKey: !!process.env.OPENAI_API_KEY,
     syncStatus,
   };
 };
@@ -78,7 +78,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     systemPrompt: (formData.get("systemPrompt") as string) || null,
   };
 
-  if (aiApiKey && !aiApiKey.includes("••••")) {
+  if (
+    updateData.aiProvider !== "openai" &&
+    aiApiKey &&
+    !aiApiKey.includes("••••")
+  ) {
     updateData.aiApiKey = aiApiKey;
   }
 
@@ -88,7 +92,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ChatSettingsPage() {
-  const { settings, hasApiKey, syncStatus } =
+  const { settings, hasApiKey, hasOpenAiEnvKey, syncStatus } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const syncFetcher = useFetcher();
@@ -241,16 +245,24 @@ export default function ChatSettingsPage() {
             ))}
           </s-select>
 
-          <s-text-field
-            label="API Key"
-            type="password"
-            value={aiApiKey}
-            placeholder={hasApiKey ? settings.aiApiKey : "Paste your API key here"}
-            onChange={(e: Event) =>
-              setAiApiKey((e.currentTarget as HTMLInputElement).value)
-            }
-            details={API_KEY_HELP[aiProvider]}
-          />
+          {aiProvider === "openai" ? (
+            <s-text variant="bodySm" tone="subdued">
+              {hasOpenAiEnvKey
+                ? "Using the OpenAI API key configured on the server."
+                : "OpenAI API key is not configured. Set OPENAI_API_KEY in the server environment."}
+            </s-text>
+          ) : (
+            <s-text-field
+              label="API Key"
+              type="password"
+              value={aiApiKey}
+              placeholder={hasApiKey ? settings.aiApiKey : "Paste your API key here"}
+              onChange={(e: Event) =>
+                setAiApiKey((e.currentTarget as HTMLInputElement).value)
+              }
+              details={API_KEY_HELP[aiProvider]}
+            />
+          )}
 
           <s-select
             label="Model"

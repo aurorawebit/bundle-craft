@@ -256,7 +256,11 @@ export async function generateChatResponse(
 
   const systemPrompt = buildSystemPrompt(orderContext, customSystemPrompt, storeKnowledge);
   const provider = aiConfig?.provider || "claude";
-  const apiKey = aiConfig?.apiKey || "";
+  // OpenAI uses a server-wide key from the environment; other providers use the per-shop key.
+  const apiKey =
+    provider === "openai"
+      ? process.env.OPENAI_API_KEY || ""
+      : aiConfig?.apiKey || "";
   const model = aiConfig?.model || DEFAULT_MODELS[provider] || DEFAULT_MODELS.claude;
 
   if (!apiKey) {
